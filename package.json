@@ -17,7 +17,10 @@
     "report": "node tools/report/cucumber-pulse.cjs",
     "test:legacy": "playwright test",
     "report:legacy": "playwright show-report reports/html",
-    "test:dashboard": "node tools/report/run-and-open.cjs"
+    "test:dashboard": "node tools/report/run-and-open.cjs",
+    "test:ci": "node tools/report/run-and-open.cjs --tags \"not @rca-validation\"",
+    "rca:analyze": "node tools/report/ai-rca.cjs",
+    "report:dashboard": "node tools/report/dashboard-generator.cjs"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.3.0",
