@@ -1,4 +1,4 @@
-
+import { getAccountState } from '../utils/accountState';
 import { Given, When, Then } from '@cucumber/cucumber';
 import { expect, type Locator } from '@playwright/test';
 
@@ -183,23 +183,19 @@ async function submitInitialSignup(world: AppWorld): Promise<void> {
  * On an unavailable confirmation page, recover
  * only after account creation is confirmed.
  */
-async function completeRegistration(
-  world: AppWorld,
-): Promise<void> {
-  await world.registerPage.completeAccountInformation(
-    world.account,
-  );
+async function completeRegistration(world: AppWorld): Promise<void> {
+  await world.registerPage.completeAccountInformation(world.account);
 
   if (await visible(world.registerPage.accountCreatedHeading)) {
+    world.accountCreated = true;
     return;
   }
 
-  const unavailable = await environmentUnavailable(world);
+  if (!await environmentUnavailable(world)) {
+    await expect(world.registerPage.accountCreatedHeading)
+      .toBeVisible({ timeout: ASSERTION_TIMEOUT });
 
-  if (!unavailable) {
-    await expect(
-      world.registerPage.accountCreatedHeading,
-    ).toBeVisible({ timeout: ASSERTION_TIMEOUT });
+    world.accountCreated = true;
     return;
   }
 
@@ -207,43 +203,27 @@ async function completeRegistration(
     world.healingEvents,
     'Account creation recovery',
     'attempted',
-    'Environment unavailable after account submission.',
+    'Checking account state after unavailable response.'
   );
 
-  if (!world.accountCreated) {
+  const state = await getAccountState(world.page, world.account.email);
+
+  if (state === 'exists') {
+    world.accountCreated = true;
+
     logRecovery(
       world.healingEvents,
       'Account creation recovery',
-      'failed',
-      'Account creation is not confirmed; submission will not be repeated.',
+      'recovered',
+      'Account existence confirmed through API.'
     );
 
-    throw new Error(
-      'REGISTRATION_STATE_UNKNOWN: The account-creation ' +
-        'response was unavailable and account creation ' +
-        'could not be confirmed.',
-    );
+    return;
   }
 
-  // The observed account-creation response suggests
-  // the submission succeeded. Recover only safe
-  // navigation to the confirmation page.
-  await navigateWithRecovery(
-    world.page,
-    '/account_created',
-    world.healingEvents,
-    config.recovery,
-  );
-
-  await expect(
-    world.registerPage.accountCreatedHeading,
-  ).toBeVisible({ timeout: ASSERTION_TIMEOUT });
-
-  logRecovery(
-    world.healingEvents,
-    'Account creation recovery',
-    'recovered',
-    'Account-created confirmation restored.',
+  throw new Error(
+    `REGISTRATION_STATE_${state.toUpperCase()}: ` +
+    'Account creation could not be confirmed after submission.'
   );
 }
 
