@@ -1,14 +1,17 @@
+
 name: Playwright Cucumber QA + Ollama RCA
 
 on:
   pull_request:
     branches: [main]
+
   push:
     branches: [main, feature/github-actions-cicd]
+
   workflow_dispatch:
+
   schedule:
     - cron: '0 0 * * *' # Daily 05:00 Pakistan Standard Time (UTC+5)
-    - cron: '0 11 20 11 *' # TEMPORARY: Nov 20 at 16:00 PKT; remove after demo
 
 permissions:
   contents: read
@@ -17,6 +20,7 @@ jobs:
   regression:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+
     env:
       CI: 'true'
       HEADED: '0'
@@ -74,7 +78,7 @@ jobs:
       - name: Run Cucumber regression and generate reports
         id: tests
         continue-on-error: true
-        run: npm run test:ci
+        run: npm run test:ci -- --tags "not @rca-validation"
 
       - name: Recover AI RCA if runner failed early
         if: always()

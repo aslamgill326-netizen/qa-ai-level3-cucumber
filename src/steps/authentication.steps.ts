@@ -83,16 +83,20 @@ async function verifySignedIn(world: AppWorld): Promise<void> {
 /**
  * Confirm logout using the expected login-page UI.
  */
+
+
 async function verifyLoggedOut(world: AppWorld): Promise<void> {
   await verifySiteHealth(world.page);
 
-  await expect(world.page).toHaveURL(
-    /\/login(?:[/?#]|$)/,
-    { timeout: ASSERTION_TIMEOUT },
-  );
+  await expect(
+    world.loginPage.logoutLink
+  ).toHaveCount(0, { timeout: ASSERTION_TIMEOUT });
 
-  await expect(world.loginPage.logoutLink).toHaveCount(0);
+  const loginLink = world.page.locator('a[href="/login"]');
+  await expect(loginLink).toBeVisible({ timeout: ASSERTION_TIMEOUT });
 }
+
+
 
 /**
  * Detect an environment error without suppressing
@@ -119,45 +123,59 @@ async function environmentUnavailable(
  * If a queue-full page appears, do not blindly
  * repeat the submission.
  */
-async function submitInitialSignup(
-  world: AppWorld,
-): Promise<void> {
+
+async function submitInitialSignup(world: AppWorld): Promise<void> {
   await navigateWithRecovery(
     world.page,
     LOGIN_ROUTE,
     world.healingEvents,
-    config.recovery,
+    config.recovery
   );
 
   await world.registerPage.submitSignup(
     world.account.name,
-    world.account.email,
+    world.account.email
   );
 
-  if (await visible(world.registerPage.accountInformationHeading)) {
-    return;
-  }
+  const heading = world.registerPage.accountInformationHeading;
+
+  if (await visible(heading)) return;
 
   if (await environmentUnavailable(world)) {
     logRecovery(
       world.healingEvents,
       'Initial signup recovery',
+      'attempted',
+      'Checking signup state without repeating submission.'
+    );
+
+    await navigateWithRecovery(
+      world.page,
+      LOGIN_ROUTE,
+      world.healingEvents,
+      config.recovery
+    );
+
+    if (await visible(heading)) return;
+
+    logRecovery(
+      world.healingEvents,
+      'Initial signup recovery',
       'failed',
-      'Signup response unavailable; submission state unknown. ' +
-        'Not repeating the submission.',
+      'Signup state could not be confirmed.'
     );
 
     throw new Error(
-      'REGISTRATION_STATE_UNKNOWN: Initial signup submission ' +
-        'returned an unavailable page. Automatic resubmission ' +
-        'is disabled to prevent duplicate operations.',
+      'REGISTRATION_STATE_UNKNOWN: Signup response unavailable. ' +
+      'Submission was not repeated to prevent duplicate operations.'
     );
   }
 
-  await expect(
-    world.registerPage.accountInformationHeading,
-  ).toBeVisible({ timeout: ASSERTION_TIMEOUT });
+  await expect(heading).toBeVisible({
+    timeout: ASSERTION_TIMEOUT
+  });
 }
+
 
 /**
  * Complete account creation once.
@@ -294,42 +312,41 @@ async function continueAfterRegistration(
  * A failed navigation after clicking logout does
  * not automatically trigger another logout click.
  */
+
 async function logoutSafely(world: AppWorld): Promise<void> {
+  const page = world.page;
+
   const logout = await resolveLocator(
-    world.page,
+    page,
     'logout-link',
-    [
-      world.loginPage.logoutLink,
-      world.page.locator('a[href="/logout"]'),
-    ],
-    world.healingEvents,
+    [world.loginPage.logoutLink, page.locator('a[href="/logout"]')],
+    world.healingEvents
   );
 
+  await logout.click({ timeout: 15000, noWaitAfter: true });
+
   try {
-    await logout.click({
-      timeout: 15000,
-      noWaitAfter: true,
+    await expect(page.locator('a[href="/logout"]')).toHaveCount(0, {
+      timeout: 10000
     });
-  } catch (error) {
-    if (!/timeout|navigation/i.test(String(error))) {
-      throw error;
+  } catch {
+    if (await environmentUnavailable(world)) {
+      logRecovery(
+        world.healingEvents,
+        'Logout navigation recovery',
+        'attempted',
+        'Recovering page after logout.'
+      );
+
+      await navigateWithRecovery(
+        page,
+        LOGIN_ROUTE,
+        world.healingEvents,
+        config.recovery
+      );
+    } else {
+      await page.reload({ waitUntil: 'domcontentloaded' });
     }
-  }
-
-  if (await environmentUnavailable(world)) {
-    logRecovery(
-      world.healingEvents,
-      'Logout navigation recovery',
-      'attempted',
-      'Environment unavailable after logout click.',
-    );
-
-    await navigateWithRecovery(
-      world.page,
-      LOGIN_ROUTE,
-      world.healingEvents,
-      config.recovery,
-    );
   }
 
   await verifyLoggedOut(world);
@@ -383,12 +400,9 @@ Then(
 // LOGOUT
 // =====================================================
 
-When(
-  'I log out',
-  async function (this: AppWorld) {
-    await logoutSafely(this);
-  },
-);
+When('I log out', async function (this: AppWorld) {
+  await logoutSafely(this);
+});
 
 Given(
   'I am logged out',

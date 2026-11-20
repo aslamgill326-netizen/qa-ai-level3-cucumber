@@ -1,4 +1,4 @@
-
+import { verifySiteHealth } from '../utils/siteHealth';
 import { Given, When, Then } from '@cucumber/cucumber';
 import { expect } from '@playwright/test';
 
@@ -41,33 +41,61 @@ When('I search for product {string}', async function (
   await this.page.locator('#submit_search').click();
 });
 
+
 Then('I should see matching search results for {string}', async function (
   this: AppWorld,
   name: string
 ) {
-  await expect(
-    this.page.getByText('SEARCHED PRODUCTS')
-  ).toBeVisible();
+  const heading = this.page.getByText('SEARCHED PRODUCTS');
+
+  try {
+    await expect(heading).toBeVisible({ timeout: 10000 });
+    await verifySiteHealth(this.page);
+  } catch (error) {
+    const url = new URL(this.page.url());
+
+    if (
+      !url.pathname.endsWith('/products') ||
+      url.searchParams.get('search') !== name
+    ) {
+      throw error;
+    }
+
+    await navigateWithRecovery(
+      this.page,
+      url.pathname + url.search,
+      this.healingEvents
+    );
+  }
+
+  await expect(heading).toBeVisible({ timeout: 10000 });
 
   await expect(
-    this.page
-      .locator('.features_items .productinfo p')
+    this.page.locator('.features_items .productinfo p')
       .filter({ hasText: name })
       .first()
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 10000 });
 });
+
+
 
 Then('no matching products should be displayed', async function (
   this: AppWorld
 ) {
-  await expect(
-    this.page.getByText('SEARCHED PRODUCTS')
-  ).toBeVisible();
+  const heading = this.page.getByText('SEARCHED PRODUCTS');
+
+  try {
+    await expect(heading).toBeVisible({ timeout: 10000 });
+  } catch (error) {
+    await verifySiteHealth(this.page);
+    throw error;
+  }
 
   await expect(
     this.page.locator('.features_items .product-image-wrapper')
-  ).toHaveCount(0);
+  ).toHaveCount(0, { timeout: 10000 });
 });
+
 
 // --------------------------------------------------
 // PRODUCT DETAILS
