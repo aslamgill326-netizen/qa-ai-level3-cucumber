@@ -1,0 +1,14 @@
+
+Feature: Newsletter subscription
+
+  @ui @p2
+  Scenario: Subscribe using a valid email
+    Given I am on the Automation Exercise homepage
+    When I subscribe using a valid disposable email
+    Then I should see the subscription success message
+
+  @ui @negative @p2
+  Scenario: Reject an invalid subscription email
+    Given I am on the Automation Exercise homepage
+    When I subscribe using an invalid email
+    Then the subscription form should reject the submission

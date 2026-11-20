@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Test execution reports and artifacts
+reports/
+test-results/
+playwright-report/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS and editor temporary files
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json

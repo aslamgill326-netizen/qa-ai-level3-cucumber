@@ -1,0 +1,32 @@
+{
+  "name": "qa-ai-level3-cucumber",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cucumber BDD + Playwright with bounded locator healing and evidence-based RCA",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "cucumber-js",
+    "test:ui": "cucumber-js --tags @UI",
+    "test:api": "cucumber-js --tags @API",
+    "test:smoke": "cucumber-js --tags @smoke",
+    "test:auth": "cucumber-js --tags @Authentication",
+    "test:report": "npm test",
+    "typecheck": "tsc --noEmit",
+    "report": "node tools/report/cucumber-pulse.cjs",
+    "test:legacy": "playwright test",
+    "report:legacy": "playwright show-report reports/html",
+    "test:dashboard": "node tools/report/run-and-open.cjs"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^13.3.0",
+    "@playwright/test": "1.65.1",
+    "@types/node": "^24.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.10"
+  }
+}
