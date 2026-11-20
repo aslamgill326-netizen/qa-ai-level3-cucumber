@@ -51,7 +51,7 @@ for (const file of fs.readdirSync(videoDir)) {
   }
 }
 
-for (const file of [results, html]) {
+for (const file of [results, html, path.join(reportDir, 'ai-rca.json'), path.join(reportDir, 'ai-rca.html')]) {
   if (fs.existsSync(file)) fs.unlinkSync(file);
 }
 
@@ -98,12 +98,15 @@ if (report.status !== 0 || !fs.existsSync(html)) {
 }
 
 // 4. Open report automatically.
-console.log('\n=== OPENING DASHBOARD ===');
-const opened = openReport();
-
-if (opened.error || opened.status !== 0) {
-  console.error('Could not open report:', opened.error?.message);
-  console.log('Open manually:', html);
+if (process.env.CI !== 'true') {
+  console.log('\n=== OPENING DASHBOARD ===');
+  const opened = openReport();
+  if (opened.error || opened.status !== 0) {
+    console.warn('Could not open report:', opened.error?.message);
+    console.log('Open manually:', html);
+  }
+} else {
+  console.log('CI mode: dashboard saved without opening a browser:', html);
 }
 
 process.exitCode = tests.status === 0 && !tests.error ? 0 : 1;

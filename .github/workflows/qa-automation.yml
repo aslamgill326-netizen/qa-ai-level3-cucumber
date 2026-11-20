@@ -1,0 +1,124 @@
+name: Playwright Cucumber QA + Ollama RCA
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, feature/github-actions-cicd]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *' # Daily 05:00 Pakistan Standard Time (UTC+5)
+    - cron: '0 11 20 11 *' # TEMPORARY: Nov 20 at 16:00 PKT; remove after demo
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CI: 'true'
+      HEADED: '0'
+      BASE_URL: https://automationexercise.com
+      ENVIRONMENT: QA
+      AI_RCA_ENABLED: 'true'
+      AI_RCA_PROVIDER: ollama
+      AI_RCA_MODEL: llama3.2:3b
+      OLLAMA_BASE_URL: http://127.0.0.1:11434
+      AI_RCA_ALLOW_CLOUD: 'false'
+      AI_RCA_TIMEOUT_MS: '180000'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+
+      - name: Start Ollama
+        run: |
+          ollama serve > /tmp/ollama.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:11434/api/tags; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/ollama.log
+          exit 1
+
+      - name: Pull local AI model
+        run: ollama pull llama3.2:3b
+
+      - name: TypeScript typecheck
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck
+
+      - name: Run Cucumber regression and generate reports
+        id: tests
+        continue-on-error: true
+        run: npm run test:ci
+
+      - name: Recover AI RCA if runner failed early
+        if: always()
+        run: |
+          if [ -f reports/cucumber/results.json ] && [ ! -f reports/cucumber/ai-rca.json ]; then
+            node tools/report/ai-rca.cjs || true
+          fi
+          if [ -f reports/cucumber/results.json ] && [ ! -f reports/cucumber/test-execution-results.html ]; then
+            node tools/report/dashboard-generator.cjs || true
+          fi
+          mkdir -p reports/cucumber
+          if [ ! -f reports/cucumber/ai-rca.json ]; then
+            node -e "require('fs').writeFileSync('reports/cucumber/ai-rca.json',JSON.stringify({provider:'Ollama (local)',mode:'missing-test-results',analyses:[],error:'No Cucumber results available for RCA'},null,2))"
+          fi
+
+      - name: Summarize run
+        if: always()
+        run: |
+          echo '## QA Regression' >> "$GITHUB_STEP_SUMMARY"
+          echo "Typecheck: ${{ steps.typecheck.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Tests/report runner: ${{ steps.tests.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f reports/cucumber/ai-rca.json ]; then
+            node -e "const x=require('./reports/cucumber/ai-rca.json');console.log('AI RCA mode:',x.mode,'analyses:',x.analyses?.length||0)"
+          fi
+
+      - name: Upload dashboard and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-reports-${{ github.run_id }}
+          path: |
+            reports/
+            test-results/
+            playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Enforce original test and typecheck results
+        if: always()
+        env:
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+        run: |
+          if [ "$TYPECHECK_OUTCOME" != 'success' ] || [ "$TEST_OUTCOME" != 'success' ]; then
+            echo 'QA pipeline failed; artifacts were retained for investigation.'
+            exit 1
+          fi
