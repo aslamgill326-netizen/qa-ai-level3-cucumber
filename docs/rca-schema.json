@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QA RCA Record",
+  "type": "object",
+  "required": [
+    "scenario_id",
+    "classification",
+    "confidence",
+    "status",
+    "symptom",
+    "evidence",
+    "alternatives",
+    "validation",
+    "recommended_action",
+    "requires_human_approval"
+  ],
+  "properties": {
+    "scenario_id": {
+      "type": "string"
+    },
+    "classification": {
+      "enum": [
+        "PRODUCT_DEFECT",
+        "TEST_SCRIPT_DEFECT",
+        "LOCATOR_OR_UI_CHANGE",
+        "TEST_DATA_OR_STATE",
+        "ENVIRONMENT_OR_NETWORK",
+        "TIMING_OR_FLAKINESS",
+        "THIRD_PARTY_DEPENDENCY",
+        "UNKNOWN"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "status": {
+      "enum": [
+        "HYPOTHESIS_PENDING_REVIEW",
+        "REVIEWED",
+        "REJECTED",
+        "VALIDATED"
+      ]
+    },
+    "symptom": {
+      "type": "string"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type",
+          "path"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "alternatives": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "validation": {
+      "type": "string"
+    },
+    "recommended_action": {
+      "type": "string"
+    },
+    "requires_human_approval": {
+      "const": true
+    },
+    "reviewer_decision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "commit_sha": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_url": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

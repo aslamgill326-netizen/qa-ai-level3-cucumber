@@ -1,3 +1,11 @@
-# Playwright skill contract
-
-Use Playwright TypeScript through the project's Cucumber `AppWorld` (not Playwright Test fixtures). Prefer semantic and scoped locators; use web-first assertions and page objects. No arbitrary sleeps, forced clicks or weakened assertions. Use unique disposable data and clean only accounts created in the scenario. Preserve screenshot, trace, video and self-healing evidence in hooks. Record healing attempts, but never silently replace assertions or mask failures. Keep all external AI calls outside test hooks and after test execution.
+# Playwright Automation Skill — Contract
+**Trigger:** Approved test design.
+**Inputs:** approved Gherkin, page structure, existing page objects, API contract, fixtures.
+**Allowed tools:** edit code on isolated branch, run typecheck/targeted tests, inspect traces. No protected-branch push.
+**Locator policy:** prefer role/label/test ID and stable scoped selectors; fallback only to reviewed unique visible candidates. Avoid brittle indexes.
+**Fixture policy:** isolated browser context, deterministic disposable data, cleanup in success/failure paths; record cleanup.
+**Assertions:** verify business outcomes and data integrity; never weaken assertions to make runs green.
+**API:** validate transport status and business response; retry only safe repeatable operations.
+**Evidence:** screenshot, trace, sanitized console/network, commit SHA, scenario ID.
+**Review checklist:** correctness, negative case, state isolation, safe retries, security, maintainability.
+**Exit:** typecheck and targeted regression pass; PR reviewed.

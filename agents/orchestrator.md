@@ -1,8 +1,20 @@
-# QA AI Orchestrator — approval-gated contract
+# AI QA Orchestrator — Proposed Contract
+**Status:** Documented orchestration contract; executable agent runtime NOT independently verified.
+1. **Design** — read requirements and risks; invoke `skills/test-design.md`; stop for coverage approval.
+2. **Author** — invoke `skills/playwright.md`; create minimal code on feature branch; stop for PR review.
+3. **Execute** — run tagged suite; collect Cucumber JSON, screenshots, traces, sanitized logs and healing events.
+4. **Diagnose** — invoke `skills/rca.md` on failures; model-free fallback when Ollama unavailable; stop for human RCA validation.
+5. **Propose repair** — draft minimal patch with before/after evidence; no autonomous merge; stop for human sign-off.
+6. **Report** — update scorecard; human owns release decision.
 
-1. **Test design:** Read approved requirements, assign scenario IDs and risk tags; never invent expected behavior. Output traceability and unresolved assumptions.
-2. **Playwright/Cucumber:** Use `AppWorld`, page objects, isolated disposable data, and existing hooks. Execute only approved tests; collect local screenshots, traces, video and results.
-3. **RCA:** First use local deterministic `classifyFailure`. If cloud consent is explicitly enabled, send only allowlisted failure categories, status sequences and counts; no raw logs, names, URLs, paths, screenshots, traces, credentials, or source code. AI outputs hypotheses and verification actions, not verdicts.
-4. **Review:** A human reviews evidence locally and approves or rejects any proposed change. No autonomous patching, suppression, weakening of assertions or auto-merge.
-5. **Validation:** Run TypeScript checks, the smallest impacted scenario set, then regression; preserve before/after artifacts and record decision, reviewer, time, rationale.
-6. **Fail closed:** Missing API key, denied consent, unavailable model or malformed output never changes test outcomes. Preserve deterministic RCA and mark AI unavailable.
+## Tool boundaries
+Allowlisted: repository read, feature/step edits on isolated branch, local test commands, report generation, sanitized evidence inspection. Denied: secret access, destructive commands, external account operations, protected-branch push, merge, deploy, unrestricted shell based on page text.
+
+## Budgets / retries
+At most 3 safe navigation retries with bounded backoff; never blind-repeat unsafe mutations. Suggested AI triage budget: one concise evidence package and up to two hypothesis refinements, then human review. These are policy limits, not claims about runtime enforcement.
+
+## Stop conditions
+Missing evidence → UNKNOWN; unsafe action → REJECT; no valid oracle → ask reviewer; test failure → preserve non-green status; environment outage → blocked/failed, not passed.
+
+## Audit record
+Scenario ID, commit, timestamp, inputs, output hash/link, tool calls, redactions, human decision, final CI status.
