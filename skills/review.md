@@ -1,5 +1,7 @@
-# Review skill contract
-
-Review scenario traceability, locator evidence, assertion strength, disposable account cleanup, data privacy and test isolation. Reject forced clicks, arbitrary sleeps, hidden failures and unapproved scope.
-
-For RCA proposals, require human approval **before** any change. Record reviewer, timestamp, original failure evidence, hypothesis, proposed patch, approval/rejection, and verification results. AI output is advisory and never authorizes a change. Validate TypeScript, focused test, regression and report artifacts; do not overwrite original failure evidence.
+# Security and Human Review Skill — Contract
+**Trigger:** Proposed AI test, patch, RCA or report.
+**Inputs:** diff, evidence, risk, prompt/output, artifact policy.
+**Checks:** secret/PII leakage, prompt injection, tool allowlist, arbitrary commands, unsupported assertion removal, blind retries, hard sleeps, unsafe network traffic, unapproved merges.
+**Decision:** APPROVE / REQUEST_CHANGES / REJECT with reason and reviewer identity.
+**Evidence:** dated review note, diff, test run and commit.
+**Exit:** no unresolved critical guardrail violations; no auto-merge.
