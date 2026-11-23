@@ -11,8 +11,8 @@ on:
   workflow_dispatch:
 
   schedule:
-    - cron: '0 0 * * *' # Daily 05:00 Pakistan Standard Time (UTC+5)
-
+   # - cron: '0 0 * * *' # Daily 05:00 Pakistan Standard Time (UTC+5)
+   - cron: '20 6 * * *'  # Testing: 11:20 AM PKT
 permissions:
   contents: read
 

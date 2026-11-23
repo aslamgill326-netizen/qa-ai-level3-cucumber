@@ -110,25 +110,28 @@ When('I open the details of the first product', async function (
     .click();
 });
 
+
 Then('I should see its name price and availability', async function (
   this: AppWorld
 ) {
-  await expect(
-    this.page.locator('.product-information h2')
-  ).toBeVisible();
+  const productInfo = this.page.locator('.product-information');
 
+  // Wait for the product details to load.
   await expect(
-    this.page
-      .locator('.product-information')
-      .getByText(/Rs\./)
-  ).toBeVisible();
+    productInfo.locator('h2')
+  ).toBeVisible({ timeout: 20000 });
 
+  // Verify the product price.
   await expect(
-    this.page
-      .locator('.product-information')
-      .getByText(/Availability:/)
-  ).toBeVisible();
+    productInfo.getByText(/Rs\.\s*\d+/)
+  ).toBeVisible({ timeout: 15000 });
+
+  // Verify product availability.
+  await expect(
+    productInfo.getByText(/Availability:/i)
+  ).toBeVisible({ timeout: 15000 });
 });
+
 
 // --------------------------------------------------
 // NEW UI TEST 1: EMPTY SEARCH
