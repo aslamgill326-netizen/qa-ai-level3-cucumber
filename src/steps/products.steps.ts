@@ -1,5 +1,4 @@
 import { verifySiteHealth } from '../utils/siteHealth';
-import { verifySiteHealth } from '../utils/siteHealth';
 import { Given, When, Then } from '@cucumber/cucumber';
 import { expect } from '@playwright/test';
 
@@ -83,18 +82,9 @@ Then('no matching products should be displayed', async function (
     await verifySiteHealth(this.page);
     throw error;
   }
-  const heading = this.page.getByText('SEARCHED PRODUCTS');
-
-  try {
-    await expect(heading).toBeVisible({ timeout: 10000 });
-  } catch (error) {
-    await verifySiteHealth(this.page);
-    throw error;
-  }
 
   await expect(
     this.page.locator('.features_items .product-image-wrapper')
-  ).toHaveCount(0, { timeout: 10000 });
   ).toHaveCount(0, { timeout: 10000 });
 });
 

@@ -141,7 +141,6 @@ async function environmentUnavailable(
  * repeat the submission.
  */
 
-async function submitInitialSignup(world: AppWorld): Promise<void> {
 
 async function submitInitialSignup(world: AppWorld): Promise<void> {
   await navigateWithRecovery(
@@ -188,11 +187,8 @@ async function submitInitialSignup(world: AppWorld): Promise<void> {
  */
 async function completeRegistration(world: AppWorld): Promise<void> {
   await world.registerPage.completeAccountInformation(world.account);
-async function completeRegistration(world: AppWorld): Promise<void> {
-  await world.registerPage.completeAccountInformation(world.account);
 
   if (await visible(world.registerPage.accountCreatedHeading)) {
-    world.accountCreated = true;
     world.accountCreated = true;
     return;
   }
@@ -200,11 +196,7 @@ async function completeRegistration(world: AppWorld): Promise<void> {
   if (!await environmentUnavailable(world)) {
     await expect(world.registerPage.accountCreatedHeading)
       .toBeVisible({ timeout: ASSERTION_TIMEOUT });
-  if (!await environmentUnavailable(world)) {
-    await expect(world.registerPage.accountCreatedHeading)
-      .toBeVisible({ timeout: ASSERTION_TIMEOUT });
 
-    world.accountCreated = true;
     world.accountCreated = true;
     return;
   }
@@ -221,24 +213,14 @@ async function completeRegistration(world: AppWorld): Promise<void> {
   if (state === 'exists') {
     world.accountCreated = true;
 
-  if (state === 'exists') {
-    world.accountCreated = true;
 
     logRecovery(
       world.healingEvents,
       'Account creation recovery',
       'recovered',
       'Account existence confirmed through API.'
-      'recovered',
-      'Account existence confirmed through API.'
     );
 
-    return;
-  }
-
-  throw new Error(
-    `REGISTRATION_STATE_${state.toUpperCase()}: ` +
-    'Account creation could not be confirmed after submission.'
     return;
   }
 
@@ -310,7 +292,6 @@ async function logoutSafely(world: AppWorld): Promise<void> {
 
   const logout = await resolveLocator(
     page,
-    page,
     'logout-link',
     [world.loginPage.logoutLink, page.locator('a[href="/logout"]')],
     world.healingEvents,
@@ -379,9 +360,6 @@ Then(
 // LOGOUT
 // =====================================================
 
-When('I log out', async function (this: AppWorld) {
-  await logoutSafely(this);
-});
 When('I log out', async function (this: AppWorld) {
   await logoutSafely(this);
 });
