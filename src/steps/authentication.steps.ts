@@ -1,4 +1,4 @@
-import { getAccountState } from '../utils/accountState';
+import { waitForAccountState } from '../utils/accountState';
 import { Given, When, Then } from '@cucumber/cucumber';
 import { expect, type Locator } from '@playwright/test';
 
@@ -10,7 +10,6 @@ import {
   navigateWithRecovery,
   resolveLocator,
   recoverInvalidLogin,
-  recoverRegistrationNavigation,
   type HealingEvent,
 } from '../utils/selfHealing';
 
@@ -31,7 +30,7 @@ const HOME_ROUTE = config.routes.home;
 // =====================================================
 
 function isEnvironmentFailure(error: unknown): boolean {
-  return /ENVIRONMENT_UNAVAILABLE|queue full|under heavy load|HTTP 503/i.test(
+  return /ENVIRONMENT_UNAVAILABLE|queue full|under heavy load|HTTP (429|500|502|503|504|520|521|522|523|524)/i.test(
     String(error),
   );
 }
@@ -85,15 +84,33 @@ async function verifySignedIn(world: AppWorld): Promise<void> {
  */
 
 
+
+
 async function verifyLoggedOut(world: AppWorld): Promise<void> {
   await verifySiteHealth(world.page);
+  await expect(world.loginPage.logoutLink).toHaveCount(0, {
+    timeout: ASSERTION_TIMEOUT,
+  });
 
-  await expect(
-    world.loginPage.logoutLink
-  ).toHaveCount(0, { timeout: ASSERTION_TIMEOUT });
+  // The login form is stronger evidence than a navigation-header link.
+  // Some healthy responses omit the header while still showing the login form.
+  const loginForm = world.page.locator('form[action="/login"]');
+  const loginEmail = world.loginPage.emailInput;
+  const loginPassword = world.loginPage.passwordInput;
+  const loginButton = world.loginPage.loginButton;
+  const formVisible = await loginForm.isVisible().catch(() => false);
+  if (formVisible) {
+    await expect(loginEmail).toBeVisible({ timeout: ASSERTION_TIMEOUT });
+    await expect(loginPassword).toBeVisible({ timeout: ASSERTION_TIMEOUT });
+    await expect(loginButton).toBeVisible({ timeout: ASSERTION_TIMEOUT });
+    return;
+  }
 
-  const loginLink = world.page.locator('a[href="/login"]');
-  await expect(loginLink).toBeVisible({ timeout: ASSERTION_TIMEOUT });
+  // If the form is absent, this is NOT a confirmed logged-out state.
+  throw new Error(
+    `LOGOUT_STATE_UNCONFIRMED: Logout link absent but login form not visible. ` +
+    `Current URL: ${world.page.url()}`,
+  );
 }
 
 
@@ -124,56 +141,41 @@ async function environmentUnavailable(
  * repeat the submission.
  */
 
+
 async function submitInitialSignup(world: AppWorld): Promise<void> {
   await navigateWithRecovery(
-    world.page,
-    LOGIN_ROUTE,
-    world.healingEvents,
-    config.recovery
+    world.page, LOGIN_ROUTE, world.healingEvents, config.recovery
   );
+  await expect(world.registerPage.signupButton).toBeVisible({ timeout: ASSERTION_TIMEOUT });
 
-  await world.registerPage.submitSignup(
-    world.account.name,
-    world.account.email
-  );
+  // One submission only. A redirect, timeout or HTTP 503 is not proof of success.
+  await world.registerPage.submitSignup(world.account.name, world.account.email);
 
-  const heading = world.registerPage.accountInformationHeading;
-
-  if (await visible(heading)) return;
-
-  if (await environmentUnavailable(world)) {
+  const form = world.registerPage.accountInformationHeading;
+  try {
+    await expect(form).toBeVisible({ timeout: 15000 });
+    await verifySiteHealth(world.page);
+    return;
+  } catch (error) {
+    // Do not navigate away from a submitted form: doing so loses the response evidence.
+    const duplicate = world.page.getByText('Email Address already exist!');
+    if (await visible(duplicate)) {
+      throw new Error('SIGNUP_REJECTED: Newly generated email is already registered.');
+    }
+    const unhealthy = await environmentUnavailable(world);
     logRecovery(
-      world.healingEvents,
-      'Initial signup recovery',
-      'attempted',
-      'Checking signup state without repeating submission.'
+      world.healingEvents, 'Initial signup confirmation', 'failed',
+      `One signup submission; form missing. URL=${world.page.url()}; ` +
+      `navigationStatus=${world.lastNavigationStatus ?? 'unknown'}; ` +
+      `environmentUnavailable=${unhealthy}; error=${String(error)}`
     );
-
-    await navigateWithRecovery(
-      world.page,
-      LOGIN_ROUTE,
-      world.healingEvents,
-      config.recovery
-    );
-
-    if (await visible(heading)) return;
-
-    logRecovery(
-      world.healingEvents,
-      'Initial signup recovery',
-      'failed',
-      'Signup state could not be confirmed.'
-    );
-
     throw new Error(
-      'REGISTRATION_STATE_UNKNOWN: Signup response unavailable. ' +
-      'Submission was not repeated to prevent duplicate operations.'
+      `${unhealthy ? 'ENVIRONMENT_UNAVAILABLE' : 'REGISTRATION_STATE_UNKNOWN'}: ` +
+      `Signup form not confirmed after one submission. ` +
+      `URL=${world.page.url()}; HTTP=${world.lastNavigationStatus ?? 'unknown'}. ` +
+      'The POST was not repeated.'
     );
   }
-
-  await expect(heading).toBeVisible({
-    timeout: ASSERTION_TIMEOUT
-  });
 }
 
 
@@ -206,10 +208,11 @@ async function completeRegistration(world: AppWorld): Promise<void> {
     'Checking account state after unavailable response.'
   );
 
-  const state = await getAccountState(world.page, world.account.email);
+  const state = await waitForAccountState(world.page, world.account.email);
 
   if (state === 'exists') {
     world.accountCreated = true;
+
 
     logRecovery(
       world.healingEvents,
@@ -231,59 +234,36 @@ async function completeRegistration(world: AppWorld): Promise<void> {
  * Continue from the account-created confirmation
  * to the authenticated homepage.
  */
-async function continueAfterRegistration(
-  world: AppWorld,
-): Promise<void> {
+async function continueAfterRegistration(world: AppWorld): Promise<void> {
+  if (!world.accountCreated) {
+    throw new Error('REGISTRATION_STATE_UNKNOWN: Account creation not confirmed.');
+  }
+
   try {
-    await world.registerPage.continueAfterAccountCreated();
-
     await verifySiteHealth(world.page);
-
-    await expect(world.page).toHaveURL(
-      new URL(HOME_ROUTE, world.baseURL).toString(),
-      { timeout: ASSERTION_TIMEOUT },
-    );
-
-    await verifySignedIn(world);
+    if (await visible(world.registerPage.continueButton)) {
+      await world.registerPage.continueAfterAccountCreated();
+    } else if (await visible(world.loginPage.loggedInUser)) {
+      await navigateWithRecovery(world.page, HOME_ROUTE, world.healingEvents);
+    } else {
+      throw new Error('REGISTRATION_CONTINUE_MISSING: Healthy page has no Continue link.');
+    }
+    await verifySiteHealth(world.page);
   } catch (error) {
-    if (!isEnvironmentFailure(error)) {
+    if (!isEnvironmentFailure(error) && !(await environmentUnavailable(world))) {
       throw error;
     }
-
-    logRecovery(
-      world.healingEvents,
-      'Registration homepage recovery',
-      'attempted',
-      'Environment unavailable after account-created confirmation.',
-    );
-
-    if (!world.accountCreated) {
-      throw new Error(
-        'REGISTRATION_STATE_UNKNOWN: Cannot recover the ' +
-          'homepage because account creation is unconfirmed.',
-      );
-    }
-
-    await recoverRegistrationNavigation(
-      world.page,
-      world.accountCreated,
-      world.loginPage.loggedInUser,
-      world.account.name,
-      world.healingEvents,
-    );
-
-    await expect(world.page).toHaveURL(
-      new URL(HOME_ROUTE, world.baseURL).toString(),
-      { timeout: ASSERTION_TIMEOUT },
-    );
-
-    logRecovery(
-      world.healingEvents,
-      'Registration homepage recovery',
-      'recovered',
-      'Homepage restored and authenticated user verified.',
-    );
+    logRecovery(world.healingEvents, 'Registration homepage recovery', 'attempted',
+      'Account confirmed; restoring homepage without repeating registration.');
+    await navigateWithRecovery(world.page, HOME_ROUTE, world.healingEvents);
+    await verifySignedIn(world);
+    logRecovery(world.healingEvents, 'Registration homepage recovery', 'recovered',
+      'Authenticated user verified.');
   }
+  await expect(world.page).toHaveURL(new URL(HOME_ROUTE, world.baseURL).toString(), {
+    timeout: ASSERTION_TIMEOUT,
+  });
+  await verifySignedIn(world);
 }
 
 /**
@@ -293,43 +273,43 @@ async function continueAfterRegistration(
  * not automatically trigger another logout click.
  */
 
+
 async function logoutSafely(world: AppWorld): Promise<void> {
   const page = world.page;
+  await verifySiteHealth(page);
+
+  // Given "I am logged out" must also work when the browser is already logged out.
+  if (!(await world.loginPage.logoutLink.isVisible().catch(() => false))) {
+    try {
+      await verifyLoggedOut(world);
+      return;
+    } catch {
+      await navigateWithRecovery(page, LOGIN_ROUTE, world.healingEvents, config.recovery);
+      await verifyLoggedOut(world);
+      return;
+    }
+  }
 
   const logout = await resolveLocator(
     page,
     'logout-link',
     [world.loginPage.logoutLink, page.locator('a[href="/logout"]')],
-    world.healingEvents
+    world.healingEvents,
   );
-
   await logout.click({ timeout: 15000, noWaitAfter: true });
 
+  // Never replay the state-changing logout click. Restore the read-only login
+  // page if the response or header is incomplete, then assert actual form state.
   try {
-    await expect(page.locator('a[href="/logout"]')).toHaveCount(0, {
-      timeout: 10000
-    });
-  } catch {
-    if (await environmentUnavailable(world)) {
-      logRecovery(
-        world.healingEvents,
-        'Logout navigation recovery',
-        'attempted',
-        'Recovering page after logout.'
-      );
-
-      await navigateWithRecovery(
-        page,
-        LOGIN_ROUTE,
-        world.healingEvents,
-        config.recovery
-      );
-    } else {
-      await page.reload({ waitUntil: 'domcontentloaded' });
-    }
+    await verifyLoggedOut(world);
+  } catch (error) {
+    logRecovery(world.healingEvents, 'Logout confirmation recovery', 'attempted',
+      `Checking login form after logout: ${String(error)}`);
+    await navigateWithRecovery(page, LOGIN_ROUTE, world.healingEvents, config.recovery);
+    await verifyLoggedOut(world);
+    logRecovery(world.healingEvents, 'Logout confirmation recovery', 'recovered',
+      'Login form visible and logout link absent after safe navigation.');
   }
-
-  await verifyLoggedOut(world);
 }
 
 // =====================================================
@@ -398,12 +378,29 @@ Given(
 When(
   'I log in using valid credentials',
   async function (this: AppWorld) {
-    await this.loginPage.login(
-      this.account.email,
-      this.account.password,
-    );
-
-    await verifySiteHealth(this.page);
+    try {
+      await this.loginPage.login(this.account.email, this.account.password);
+      await verifySiteHealth(this.page);
+    } catch (error) {
+      if (!isEnvironmentFailure(error) && !(await environmentUnavailable(this))) {
+        throw error;
+      }
+      logRecovery(this.healingEvents, 'Valid login recovery', 'attempted',
+        'Restoring homepage after unavailable login response.');
+      await navigateWithRecovery(this.page, HOME_ROUTE, this.healingEvents);
+      // Retry authentication only if the healthy login page confirms no session.
+      if (!(await visible(this.loginPage.loggedInUser))) {
+        await navigateWithRecovery(this.page, LOGIN_ROUTE, this.healingEvents);
+        await verifyLoggedOut(this);
+        await this.loginPage.login(this.account.email, this.account.password);
+        if (await environmentUnavailable(this)) {
+          await navigateWithRecovery(this.page, HOME_ROUTE, this.healingEvents);
+        }
+      }
+      await verifySignedIn(this);
+      logRecovery(this.healingEvents, 'Valid login recovery', 'recovered',
+        'Expected authenticated user verified.');
+    }
   },
 );
 

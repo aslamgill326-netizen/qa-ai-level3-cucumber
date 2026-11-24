@@ -74,14 +74,6 @@ export class AppWorld extends World {
           this.lastNavigationStatus = response.status();
         }
       } catch { /* Frame may be detached. */ }
-      try {
-        const pathname = new URL(response.url()).pathname;
-        if (req.method() === 'POST' && pathname === '/signup' &&
-            (req.postData() ?? '').includes('form_type=create_account') &&
-            response.status() === 302) {
-          this.accountCreated = true;
-        }
-      } catch { /* Ignore malformed or unexpected response URLs. */ }
     });
   }
 }

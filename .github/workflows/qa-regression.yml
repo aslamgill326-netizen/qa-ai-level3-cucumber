@@ -75,10 +75,11 @@ jobs:
         continue-on-error: true
         run: npm run typecheck
 
-      - name: Run Cucumber regression and generate reports
+      - name: Run Cucumber regression (exclude RCA validation) and generate reports
         id: tests
         continue-on-error: true
-        run: npm run test:ci -- --tags "not @rca-validation"
+        run: npm run test:ci
+        # package.json test:ci passes --tags "not @rca-validation" to the report runner.
 
       - name: Recover AI RCA if runner failed early
         if: always()

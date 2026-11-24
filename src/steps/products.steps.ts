@@ -16,6 +16,7 @@ Given('I am on the products page', async function (this: AppWorld) {
     this.healingEvents
   );
 
+  await verifySiteHealth(this.page);
   await expect(
     this.page.locator('.features_items .product-image-wrapper').first()
   ).toBeVisible();
@@ -37,46 +38,37 @@ When('I search for product {string}', async function (
   this: AppWorld,
   name: string
 ) {
+  await verifySiteHealth(this.page);
   await this.page.locator('#search_product').fill(name);
   await this.page.locator('#submit_search').click();
 });
 
 
+
 Then('I should see matching search results for {string}', async function (
-  this: AppWorld,
-  name: string
+  this: AppWorld, name: string
 ) {
   const heading = this.page.getByText('SEARCHED PRODUCTS');
-
   try {
-    await expect(heading).toBeVisible({ timeout: 10000 });
     await verifySiteHealth(this.page);
+    await expect(heading).toBeVisible({ timeout: 10000 });
   } catch (error) {
+    // A search result URL is a safe GET to retry. Never resubmit the search POST.
     const url = new URL(this.page.url());
-
-    if (
-      !url.pathname.endsWith('/products') ||
-      url.searchParams.get('search') !== name
-    ) {
+    if (url.pathname !== '/products' || url.searchParams.get('search') !== name) {
       throw error;
     }
-
     await navigateWithRecovery(
-      this.page,
-      url.pathname + url.search,
-      this.healingEvents
+      this.page, url.pathname + url.search, this.healingEvents
     );
+    await expect(heading).toBeVisible({ timeout: 10000 });
   }
-
-  await expect(heading).toBeVisible({ timeout: 10000 });
-
+  await verifySiteHealth(this.page);
   await expect(
     this.page.locator('.features_items .productinfo p')
-      .filter({ hasText: name })
-      .first()
-  ).toBeVisible({ timeout: 10000 });
+      .filter({ hasText: name }).first()
+  ).toBeVisible({ timeout: 15000 });
 });
-
 
 
 Then('no matching products should be displayed', async function (
@@ -97,6 +89,7 @@ Then('no matching products should be displayed', async function (
 });
 
 
+
 // --------------------------------------------------
 // PRODUCT DETAILS
 // --------------------------------------------------
@@ -110,25 +103,28 @@ When('I open the details of the first product', async function (
     .click();
 });
 
+
 Then('I should see its name price and availability', async function (
   this: AppWorld
 ) {
-  await expect(
-    this.page.locator('.product-information h2')
-  ).toBeVisible();
+  const productInfo = this.page.locator('.product-information');
 
+  // Wait for the product details to load.
   await expect(
-    this.page
-      .locator('.product-information')
-      .getByText(/Rs\./)
-  ).toBeVisible();
+    productInfo.locator('h2')
+  ).toBeVisible({ timeout: 20000 });
 
+  // Verify the product price.
   await expect(
-    this.page
-      .locator('.product-information')
-      .getByText(/Availability:/)
-  ).toBeVisible();
+    productInfo.getByText(/Rs\.\s*\d+/)
+  ).toBeVisible({ timeout: 15000 });
+
+  // Verify product availability.
+  await expect(
+    productInfo.getByText(/Availability:/i)
+  ).toBeVisible({ timeout: 15000 });
 });
+
 
 // --------------------------------------------------
 // NEW UI TEST 1: EMPTY SEARCH
@@ -137,6 +133,7 @@ Then('I should see its name price and availability', async function (
 When('I search for a product with an empty keyword', async function (
   this: AppWorld
 ) {
+  await verifySiteHealth(this.page);
   await this.page.locator('#search_product').fill('');
   await this.page.locator('#submit_search').click();
 });
@@ -147,8 +144,9 @@ Then(
   async function (this: AppWorld) {
     const searchInput = this.page.locator('#search_product');
 
-    // Empty input should remain empty.
-    await expect(searchInput).toHaveValue('');
+    // Distinguish an overloaded server page from a missing locator.
+    await verifySiteHealth(this.page);
+    await expect(searchInput).toHaveValue('', { timeout: 10000 });
 
     // The application should remain on a valid products page.
     await expect(this.page).toHaveURL(

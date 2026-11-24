@@ -99,7 +99,7 @@ function main() {
   if (fs.existsSync(aiPath)) {
     try {
       const loaded = JSON.parse(fs.readFileSync(aiPath, 'utf8'));
-      if (loaded && Array.isArray(loaded.analyses)) ai = {
+      if (loaded && loaded.resultsHash === require('node:crypto').createHash('sha256').update(fs.readFileSync(input)).digest('hex') && Array.isArray(loaded.analyses)) ai = {
         mode: String(loaded.mode || 'unknown'),
         model: String(loaded.model || ''),
         provider: String(loaded.provider || ''),
@@ -136,8 +136,8 @@ const failures=data.rows.filter(r=>r.status==='failed');
 const ai=data.ai||{mode:'not-run',analyses:[]};
 const findings=(ai.analyses||[]).filter(a=>a && /^case-[0-9]+$/.test(String(a.id||'')));
 const aiHeader='<p class="ai-status"><b>AI RCA status:</b> '+safe(ai.mode)+(ai.provider?' · Provider: '+safe(ai.provider):'')+(ai.model?' · Model: '+safe(ai.model):'')+'</p>';
-const aiCards=findings.map(a=>'<div class="ai-card"><h3>'+safe(a.id)+' · '+safe(a.confidence||'low')+' confidence</h3>'+
-  '<p><b>Hypothesis:</b> '+safe(a.hypothesis)+'</p>'+
+const aiCards=findings.map(a=>'<div class="ai-card"><h3>'+safe(a.id)+' · '+safe(a.category||'Unclassified')+' · '+safe(a.confidence||'low')+' confidence</h3>'+
+  '<p><b>Analysis source:</b> '+safe(a.source||'unknown')+'</p><p><b>Evidence-based finding:</b> '+safe(a.hypothesis)+'</p>'+
   '<p><b>Alternative:</b> '+safe(a.alternative)+'</p>'+
   '<p><b>Supporting metadata:</b> '+safe(a.evidence)+'</p>'+
   '<p><b>Suggested verification:</b> '+safe(a.proposedAction)+'</p>'+

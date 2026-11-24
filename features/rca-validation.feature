@@ -1,6 +1,7 @@
-
 @rca-validation
 Feature: AI Root Cause Analysis Validation
+  Validate that intentionally failed tests are captured
+  and displayed in the Failure Analysis & RCA dashboard.
 
   Scenario: Intentionally fail a product search assertion
     Given I am on the products page

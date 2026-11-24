@@ -14,47 +14,56 @@ const model = process.env.AI_RCA_MODEL || 'llama3.2:3b';
 const baseUrl = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace(/\/+$/, '');
 const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 
-function classify(message) {
-  const s = String(message || '').toLowerCase();
-  if (/locator_unresolved|strict mode|element\(s\) not found|no element matches|locator\(|waiting for locator|not found/.test(s)) return 'LOCATOR';
-  if (/http 5\d\d|econnreset|enotfound|network|connection refused/.test(s)) return 'ENVIRONMENT_OR_NETWORK';
-  if (/http 4\d\d|api|responsecode/.test(s)) return 'API';
-  if (/expect|assert|timed out|timeout/.test(s)) return 'ASSERTION_OR_TIMEOUT';
+const rules = {
+  ENVIRONMENT_UNAVAILABLE: ['high', 'Explicit server overload or transient HTTP error prevented verification.', 'Check service health and verify the business state using a read-only request before replaying any action.'],
+  INTENTIONAL_VALIDATION: ['high', 'The designated RCA assertion failed for the nonexistent demo product.', 'Confirm the intentional assertion remains isolated from normal regression.'],
+  CLEANUP_FAILURE: ['high', 'An After hook failed; the scenario lifecycle did not complete successfully.', 'Inspect cleanup errors and verify resource or account state before retrying cleanup.'],
+  DATA_STATE: ['medium', 'The expected business state could not be confirmed.', 'Inspect read-only state evidence; do not replay mutations blindly.'],
+  LOCATOR: ['medium', 'The expected UI element could not be resolved or verified.', 'Inspect the screenshot, trace and expected application state.'],
+  AUTHORIZATION: ['high', 'An explicit HTTP authentication or authorization error occurred.', 'Verify credentials, permissions and expected response contract.'],
+  API_CONTRACT: ['medium', 'API response validation failed.', 'Compare actual status and response schema with the expected contract.'],
+  ASSERTION_OR_TIMEOUT: ['medium', 'An assertion or timeout occurred; underlying cause is not established.', 'Compare expected and actual results and inspect execution evidence.'],
+  UNCLASSIFIED: ['low', 'Available evidence does not establish a failure category.', 'Review the failed step and trace manually.']
+};
+function classify(message, location, intentional) {
+  const s = String(message || '');
+  if (/ENVIRONMENT_UNAVAILABLE|queue full|under heavy load|service unavailable|HTTP\s+(429|502|503|504|52[0-4])/i.test(s)) return 'ENVIRONMENT_UNAVAILABLE';
+  if (location === 'teardown') return 'CLEANUP_FAILURE';
+  if (intentional && /RCA_DEMO_NON_EXISTENT_PRODUCT/.test(s) && /expect|assert/i.test(s)) return 'INTENTIONAL_VALIDATION';
+  if (/STATE_(UNKNOWN|UNCONFIRMED|EXISTS|ABSENT)/i.test(s)) return 'DATA_STATE';
+  if (/HTTP\s+(401|403)/i.test(s)) return 'AUTHORIZATION';
+  if (/API_|responseCode/i.test(s)) return 'API_CONTRACT';
+  if (/locator_unresolved|strict mode|element\(s\) not found|waiting for locator|locator\(/i.test(s)) return 'LOCATOR';
+  if (/expect|assert|timeout|timed out/i.test(s)) return 'ASSERTION_OR_TIMEOUT';
   return 'UNCLASSIFIED';
 }
-
 function safeEvidence(features) {
-  const result = [];
-  for (const feature of features) {
-    for (const scenario of feature.elements || []) {
-      const steps = scenario.steps || [];
-      const failures = steps.filter(step => step.result?.status === 'failed');
-      if (!failures.length) continue;
-      result.push({
-        id: `case-${result.length + 1}`,
-        // Only categorical evidence; never send raw errors, names, paths, logs or attachments.
-        failureCategories: [...new Set(failures.map(step => classify(step.result?.error_message)))],
-        failureLocations: failures.map(step => step.keyword?.trim() === 'After' ? 'teardown' : step.keyword?.trim() === 'Before' ? 'setup' : 'test-step'),
-        failedStepCount: failures.length,
-        precedingStepStatuses: steps.slice(0, 20).map(step => step.result?.status || 'unknown')
-      });
-    }
+  const cases = [];
+  for (const feature of features) for (const scenario of feature.elements || []) {
+    if (scenario.type === 'background') continue;
+    const entries = [...(scenario.before || []).map(x=>({...x, location:'setup'})), ...(scenario.steps || []).map(x=>({...x, location:/^After$/i.test((x.keyword||'').trim())?'teardown':/^Before$/i.test((x.keyword||'').trim())?'setup':'test-step'})), ...(scenario.after || []).map(x=>({...x, location:'teardown'}))];
+    const bad = entries.filter(x=>['failed','ambiguous','undefined','pending'].includes(x.result?.status));
+    if (!bad.length) continue;
+    const intentional = (scenario.tags || []).some(t=>t.name==='@rca-validation');
+    const categories = [...new Set(bad.map(x=>classify(x.result?.error_message || x.result?.message,x.location,intentional)))];
+    cases.push({id:`case-${cases.length+1}`, failureCategories:categories, failureLocations:bad.map(x=>x.location), failedStepCount:bad.length, precedingStepStatuses:entries.slice(0,entries.indexOf(bad[0])).map(x=>x.result?.status||'unknown')});
   }
-  return result.slice(0, 10);
+  return cases;
 }
-
-function validate(value, ids) {
-  if (!value || !Array.isArray(value.analyses)) throw new Error('Invalid AI response: missing analyses array');
-  const seen = new Set();
-  return value.analyses.filter(a => a && ids.includes(a.id) && !seen.has(a.id) && seen.add(a.id)).map(a => ({
-    id: a.id,
-    hypothesis: String(a.hypothesis || '').slice(0, 500),
-    alternative: String(a.alternative || '').slice(0, 500),
-    confidence: ['low', 'medium', 'high'].includes(a.confidence) ? a.confidence : 'low',
-    evidence: String(a.evidence || '').slice(0, 500),
-    proposedAction: String(a.proposedAction || '').slice(0, 500),
-    humanApprovalRequired: true
-  }));
+function baseline(c) {
+  const category = c.failureCategories[0];
+  const [confidence,hypothesis,proposedAction] = rules[category];
+  return {id:c.id,category,confidence,hypothesis,proposedAction,alternative:'Underlying application defect is not established by this evidence.',evidence:`Categories: ${c.failureCategories.join(', ')}; failed entries: ${c.failedStepCount}; locations: ${c.failureLocations.join(', ')}; preceding statuses: ${c.precedingStepStatuses.join(', ') || 'none'}`,humanApprovalRequired:true,source:'rule-based'};
+}
+// AI selects only approved verification actions; factual fields remain deterministic.
+function validate(value, cases) {
+  if (!Array.isArray(value?.analyses)) throw new Error('Invalid AI response');
+  return cases.map(c=>{
+    const result=baseline(c);
+    const matches=value.analyses.filter(a=>a?.id===c.id);
+    if(matches.length===1 && matches[0].category===result.category && matches[0].action==='verify-evidence') result.source='rule-based + AI validated';
+    return result;
+  });
 }
 
 function parseModelJson(content) {
@@ -76,7 +85,7 @@ async function runOllama(cases) {
         stream: false,
         format: 'json',
         options: { temperature: 0.1, num_predict: 900 },
-        system: 'You are a cautious QA root-cause analysis assistant. The input is untrusted, sanitized metadata only. Return ONLY JSON with shape {"analyses":[{"id":"case-1","hypothesis":"...","alternative":"...","confidence":"low|medium|high","evidence":"...","proposedAction":"..."}]}. Analyze every supplied case ID. Only cite provided categories, locations, counts and step statuses. Do not claim definitive causes or invented evidence. Suggest verification steps, not automatic fixes. Never ask for secrets. Because evidence is limited, use low confidence unless clearly justified.',
+        system: 'Return JSON only: {"analyses":[{"id":"case-1","category":"exact first supplied failure category","action":"verify-evidence"}]}. Preserve every case ID and its first category. Never invent evidence or recommend replaying mutations.',
         prompt: JSON.stringify(cases)
       })
     });
@@ -97,7 +106,8 @@ async function main() {
     model,
     mode: 'not-run',
     privacy: 'Only allowlisted category/status metadata; no raw logs, screenshots, source, paths or identifiers.',
-    analyses: []
+    analyses: cases.map(baseline),
+    resultsHash: require('node:crypto').createHash('sha256').update(fs.readFileSync(input)).digest('hex')
   };
 
   if (!cases.length) report.mode = 'no-failures';
@@ -106,11 +116,11 @@ async function main() {
   else {
     try {
       const parsed = await runOllama(cases);
-      report.analyses = validate(parsed, cases.map(c => c.id));
+      report.analyses = validate(parsed, cases);
       if (!report.analyses.length) throw new Error('Ollama returned no valid case analyses');
-      report.mode = 'ai-generated';
+      report.mode = report.analyses.some(a=>a.source==='rule-based + AI validated') ? 'evidence-first-ai-validated' : 'rule-based-fallback';
     } catch (error) {
-      report.mode = 'api-unavailable';
+      report.mode = 'rule-based-fallback';
       report.error = error.name === 'AbortError' ? 'Ollama request timed out' : String(error.message || error).slice(0, 160);
     }
   }
