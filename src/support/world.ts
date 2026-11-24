@@ -1,3 +1,4 @@
+
 import { World, setWorldConstructor, type IWorldOptions } from '@cucumber/cucumber';
 import { chromium, request, type Browser, type BrowserContext, type Page, type APIRequestContext } from '@playwright/test';
 import fs from 'node:fs';
@@ -7,6 +8,13 @@ import { RegisterPage } from '../pages/RegisterPage';
 import { createDisposableTestAccount, type DisposableTestAccount } from '../utils/testData';
 import { navigateWithRecovery, type HealingEvent } from '../utils/selfHealing';
 import { config } from '../utils/config';
+
+const AD_DOMAINS = [
+  'googlesyndication.com',
+  'doubleclick.net',
+  'googleadservices.com',
+  'adservice.google.com',
+];
 
 export class AppWorld extends World {
   browser!: Browser;
@@ -26,16 +34,21 @@ export class AppWorld extends World {
   readonly evidenceRoot = path.resolve('reports', 'cucumber');
   baseURL = config.baseURL;
 
-  constructor(options: IWorldOptions) { super(options); }
+  constructor(options: IWorldOptions) {
+    super(options);
+  }
 
   async start(): Promise<void> {
     const parameters = this.parameters as { baseURL?: string };
     this.baseURL = parameters.baseURL?.trim() || config.baseURL;
     this.prepareEvidenceDirectories();
 
-    // GitHub Actions uses headless Chromium. Local HEADED=1 remains supported.
     const headed = process.env.CI !== 'true' && process.env.HEADED === '1';
-    this.browser = await chromium.launch({ headless: !headed, slowMo: headed ? 100 : 0 });
+    this.browser = await chromium.launch({
+      headless: !headed,
+      slowMo: headed ? 100 : 0,
+    });
+
     this.context = await this.browser.newContext({
       baseURL: this.baseURL,
       viewport: { width: 1440, height: 900 },
@@ -44,7 +57,18 @@ export class AppWorld extends World {
         size: { width: 1440, height: 900 },
       },
     });
-    await this.context.tracing.start({ screenshots: true, snapshots: true, sources: true });
+
+    await this.context.route(
+      url => AD_DOMAINS.some(domain =>
+        url.hostname === domain || url.hostname.endsWith(`.${domain}`)
+      ),
+      route => route.abort('blockedbyclient')
+    );
+
+    await this.context.tracing.start({
+      screenshots: true, snapshots: true, sources: true,
+    });
+
     this.page = await this.context.newPage();
     this.registerResponseMonitoring();
     this.api = await request.newContext({ baseURL: this.baseURL });
@@ -55,8 +79,9 @@ export class AppWorld extends World {
       maxAttempts: 3,
       initialDelayMs: 2000,
       maxDelayMs: 10000,
-      timeoutMs: 30000,
+      timeoutMs: 15000,
     });
+
     console.log(`[WORLD] Application opened: ${this.page.url()}`);
   }
 
@@ -68,9 +93,9 @@ export class AppWorld extends World {
 
   private registerResponseMonitoring(): void {
     this.page.on('response', response => {
-      const req = response.request();
       try {
-        if (req.isNavigationRequest() && response.frame() === this.page.mainFrame()) {
+        if (response.request().isNavigationRequest() &&
+            response.frame() === this.page.mainFrame()) {
           this.lastNavigationStatus = response.status();
         }
       } catch { /* Frame may be detached. */ }
