@@ -94,35 +94,57 @@ Then('no matching products should be displayed', async function (
 // PRODUCT DETAILS
 // --------------------------------------------------
 
-When('I open the details of the first product', async function (
-  this: AppWorld
-) {
-  await this.page
-    .locator('a[href^="/product_details/"]')
-    .first()
-    .click();
+// Scenario-local expected destination and product identity.
+const expectedDetails = new WeakMap<AppWorld, { url: string; name: string }>();
+
+When('I open the details of the first product', async function (this: AppWorld) {
+  await verifySiteHealth(this.page);
+  const link = this.page.locator('a[href^="/product_details/"]').first();
+  await expect(link).toBeVisible();
+  const href = await link.getAttribute('href');
+  if (!href || !/^\/product_details\/\d+$/.test(href)) {
+    throw new Error('PRODUCT_LINK_INVALID: Expected a product details link.');
+  }
+  const name = (await link.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " product-image-wrapper ")][1]').locator('.productinfo p').first().innerText({ timeout: 5000 })).trim();
+  if (!name) throw new Error('PRODUCT_NAME_MISSING: Product card has no name.');
+  const url = new URL(href, this.baseURL).toString();
+  expectedDetails.set(this, { url, name });
+  try {
+    await link.click({ timeout: 15000 });
+    await this.page.waitForURL(url, { waitUntil: 'domcontentloaded', timeout: 10000 });
+  } catch (error) {
+    if (!/net::ERR_(CONNECTION_RESET|CONNECTION_CLOSED|CONNECTION_TIMED_OUT|TIMED_OUT|NETWORK_CHANGED|EMPTY_RESPONSE)|ECONNRESET/i.test(String(error))) throw error;
+    await navigateWithRecovery(this.page, url, this.healingEvents);
+  }
 });
 
-
-Then('I should see its name price and availability', async function (
-  this: AppWorld
-) {
+Then('I should see its name price and availability', async function (this: AppWorld) {
+  const expected = expectedDetails.get(this);
+  if (!expected) throw new Error('PRODUCT_STATE_UNKNOWN: No selected product recorded.');
   const productInfo = this.page.locator('.product-information');
-
-  // Wait for the product details to load.
-  await expect(
-    productInfo.locator('h2')
-  ).toBeVisible({ timeout: 20000 });
-
-  // Verify the product price.
-  await expect(
-    productInfo.getByText(/Rs\.\s*\d+/)
-  ).toBeVisible({ timeout: 15000 });
-
-  // Verify product availability.
-  await expect(
-    productInfo.getByText(/Availability:/i)
-  ).toBeVisible({ timeout: 15000 });
+  const heading = productInfo.locator('h2');
+  try {
+    await verifySiteHealth(this.page);
+    await expect(heading).toBeVisible({ timeout: 20000 });
+  } catch (error) {
+    let healthError: unknown;
+    try { await verifySiteHealth(this.page); } catch (failure) { healthError = failure; }
+    const status = this.lastNavigationStatus;
+    if (!/ENVIRONMENT_UNAVAILABLE/i.test(String(error)) &&
+        !/ENVIRONMENT_UNAVAILABLE/i.test(String(healthError)) &&
+        !(status !== null && [429, 500, 502, 503, 504, 520, 521, 522, 523, 524].includes(status))) {
+      throw error;
+    }
+    await navigateWithRecovery(this.page, expected.url, this.healingEvents, {
+      maxAttempts: 2, initialDelayMs: 1000, timeoutMs: 10000,
+    });
+  }
+  await verifySiteHealth(this.page);
+  await expect(this.page).toHaveURL(expected.url);
+  await expect(heading).toBeVisible({ timeout: 10000 });
+  await expect(heading).toHaveText(expected.name, { timeout: 5000 });
+  await expect(productInfo.getByText(/Rs\.\s*\d+/)).toBeVisible({ timeout: 5000 });
+  await expect(productInfo.getByText(/Availability:/i)).toBeVisible({ timeout: 5000 });
 });
 
 
