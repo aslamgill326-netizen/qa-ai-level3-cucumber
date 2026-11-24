@@ -1,11 +1,15 @@
+
 name: Playwright Cucumber QA + Ollama RCA
 
 on:
   pull_request:
     branches: [main]
+
   push:
     branches: [main, feature/github-actions-cicd]
+
   workflow_dispatch:
+
   schedule:
     - cron: '0 0 * * *' # Daily 05:00 Pakistan Standard Time (UTC+5)
 
@@ -16,6 +20,7 @@ jobs:
   regression:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+
     env:
       CI: 'true'
       HEADED: '0'

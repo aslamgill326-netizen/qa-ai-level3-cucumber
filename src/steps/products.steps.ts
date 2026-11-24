@@ -1,4 +1,5 @@
 import { verifySiteHealth } from '../utils/siteHealth';
+import { verifySiteHealth } from '../utils/siteHealth';
 import { Given, When, Then } from '@cucumber/cucumber';
 import { expect } from '@playwright/test';
 
@@ -44,6 +45,7 @@ When('I search for product {string}', async function (
 });
 
 
+
 Then('I should see matching search results for {string}', async function (
   this: AppWorld, name: string
 ) {
@@ -81,11 +83,21 @@ Then('no matching products should be displayed', async function (
     await verifySiteHealth(this.page);
     throw error;
   }
+  const heading = this.page.getByText('SEARCHED PRODUCTS');
+
+  try {
+    await expect(heading).toBeVisible({ timeout: 10000 });
+  } catch (error) {
+    await verifySiteHealth(this.page);
+    throw error;
+  }
 
   await expect(
     this.page.locator('.features_items .product-image-wrapper')
   ).toHaveCount(0, { timeout: 10000 });
+  ).toHaveCount(0, { timeout: 10000 });
 });
+
 
 
 // --------------------------------------------------

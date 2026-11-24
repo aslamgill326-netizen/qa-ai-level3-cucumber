@@ -48,6 +48,7 @@ async function addFirstProduct(world: AppWorld, quantity = 1): Promise<void> {
 }
 
 When('I add the first product to my cart', async function (this: AppWorld) {
+When('I add the first product to my cart', async function (this: AppWorld) {
   await addFirstProduct(this);
 });
 
@@ -56,6 +57,7 @@ Then('the product should appear in my cart', async function (this: AppWorld) {
   await expect(this.page.locator('#product-1')).toBeVisible({ timeout: UI_TIMEOUT });
 });
 
+Given('I have added a product to my cart', async function (this: AppWorld) {
 Given('I have added a product to my cart', async function (this: AppWorld) {
   await addFirstProduct(this);
 });
@@ -70,6 +72,7 @@ Then('the product should no longer appear in my cart', async function (this: App
   await expect(this.page.locator('#product-1')).toHaveCount(0, { timeout: UI_TIMEOUT });
 });
 
+Given("I am viewing a product's details", async function (this: AppWorld) {
 Given("I am viewing a product's details", async function (this: AppWorld) {
   await navigateWithRecovery(this.page, '/product_details/1', this.healingEvents);
   await verifySiteHealth(this.page);

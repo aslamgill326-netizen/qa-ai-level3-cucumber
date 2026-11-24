@@ -1,4 +1,3 @@
-
 import { When, Then } from '@cucumber/cucumber';
 import { expect, type APIResponse } from '@playwright/test';
 import { AppWorld } from '../support/world';
@@ -69,7 +68,7 @@ async function executeSafeRequest(
   world.apiBody = await parseResponse(response);
 }
 
-// Existing login API scenarios
+// Login API scenarios
 
 When(
   'I submit the login API request without an email',
@@ -101,15 +100,16 @@ When(
 When(
   'I send DELETE to the login API',
   async function (this: AppWorld) {
-    const response = await this.api.delete('/api/verifyLogin', {
-      timeout: API_TIMEOUT
-    });
-
-    this.apiBody = await parseResponse(response);
+    // This endpoint is expected to reject DELETE without changing state.
+    await executeSafeRequest(this, 'Unsupported DELETE login API', () =>
+      this.api.delete('/api/verifyLogin', {
+        timeout: API_TIMEOUT
+      })
+    );
   }
 );
 
-// New products API scenarios
+// Products API scenarios
 
 When(
   'I request the complete products list',
@@ -173,9 +173,7 @@ When(
 Then(
   'the API response code should be {int}',
   function (this: AppWorld, code: number) {
-    expect(this.apiBody).toMatchObject({
-      responseCode: code
-    });
+    expect(this.apiBody).toMatchObject({ responseCode: code });
   }
 );
 
@@ -190,7 +188,6 @@ Then(
   'the products list should not be empty',
   function (this: AppWorld) {
     const products = (this.apiBody as ApiBody).products;
-
     expect(Array.isArray(products)).toBe(true);
     expect(products!.length).toBeGreaterThan(0);
   }
@@ -200,7 +197,6 @@ Then(
   'the API search results should contain products',
   function (this: AppWorld) {
     const products = (this.apiBody as ApiBody).products;
-
     expect(Array.isArray(products)).toBe(true);
     expect(products!.length).toBeGreaterThan(0);
   }
@@ -210,7 +206,6 @@ Then(
   'the brands list should not be empty',
   function (this: AppWorld) {
     const brands = (this.apiBody as ApiBody).brands;
-
     expect(Array.isArray(brands)).toBe(true);
     expect(brands!.length).toBeGreaterThan(0);
   }

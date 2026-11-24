@@ -84,6 +84,8 @@ async function verifySignedIn(world: AppWorld): Promise<void> {
  */
 
 
+
+
 async function verifyLoggedOut(world: AppWorld): Promise<void> {
   await verifySiteHealth(world.page);
   await expect(world.loginPage.logoutLink).toHaveCount(0, {
@@ -111,6 +113,8 @@ async function verifyLoggedOut(world: AppWorld): Promise<void> {
   );
 }
 
+
+
 /**
  * Detect an environment error without suppressing
  * unrelated application failures.
@@ -136,6 +140,8 @@ async function environmentUnavailable(
  * If a queue-full page appears, do not blindly
  * repeat the submission.
  */
+
+async function submitInitialSignup(world: AppWorld): Promise<void> {
 
 async function submitInitialSignup(world: AppWorld): Promise<void> {
   await navigateWithRecovery(
@@ -173,6 +179,7 @@ async function submitInitialSignup(world: AppWorld): Promise<void> {
   }
 }
 
+
 /**
  * Complete account creation once.
  *
@@ -181,8 +188,11 @@ async function submitInitialSignup(world: AppWorld): Promise<void> {
  */
 async function completeRegistration(world: AppWorld): Promise<void> {
   await world.registerPage.completeAccountInformation(world.account);
+async function completeRegistration(world: AppWorld): Promise<void> {
+  await world.registerPage.completeAccountInformation(world.account);
 
   if (await visible(world.registerPage.accountCreatedHeading)) {
+    world.accountCreated = true;
     world.accountCreated = true;
     return;
   }
@@ -190,7 +200,11 @@ async function completeRegistration(world: AppWorld): Promise<void> {
   if (!await environmentUnavailable(world)) {
     await expect(world.registerPage.accountCreatedHeading)
       .toBeVisible({ timeout: ASSERTION_TIMEOUT });
+  if (!await environmentUnavailable(world)) {
+    await expect(world.registerPage.accountCreatedHeading)
+      .toBeVisible({ timeout: ASSERTION_TIMEOUT });
 
+    world.accountCreated = true;
     world.accountCreated = true;
     return;
   }
@@ -207,13 +221,24 @@ async function completeRegistration(world: AppWorld): Promise<void> {
   if (state === 'exists') {
     world.accountCreated = true;
 
+  if (state === 'exists') {
+    world.accountCreated = true;
+
     logRecovery(
       world.healingEvents,
       'Account creation recovery',
       'recovered',
       'Account existence confirmed through API.'
+      'recovered',
+      'Account existence confirmed through API.'
     );
 
+    return;
+  }
+
+  throw new Error(
+    `REGISTRATION_STATE_${state.toUpperCase()}: ` +
+    'Account creation could not be confirmed after submission.'
     return;
   }
 
@@ -266,6 +291,7 @@ async function continueAfterRegistration(world: AppWorld): Promise<void> {
  * not automatically trigger another logout click.
  */
 
+
 async function logoutSafely(world: AppWorld): Promise<void> {
   const page = world.page;
   await verifySiteHealth(page);
@@ -283,6 +309,7 @@ async function logoutSafely(world: AppWorld): Promise<void> {
   }
 
   const logout = await resolveLocator(
+    page,
     page,
     'logout-link',
     [world.loginPage.logoutLink, page.locator('a[href="/logout"]')],
@@ -352,6 +379,9 @@ Then(
 // LOGOUT
 // =====================================================
 
+When('I log out', async function (this: AppWorld) {
+  await logoutSafely(this);
+});
 When('I log out', async function (this: AppWorld) {
   await logoutSafely(this);
 });
