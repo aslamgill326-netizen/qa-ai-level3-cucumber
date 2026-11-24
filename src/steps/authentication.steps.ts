@@ -87,32 +87,20 @@ async function verifySignedIn(world: AppWorld): Promise<void> {
 
 
 async function verifyLoggedOut(world: AppWorld): Promise<void> {
-  await verifySiteHealth(world.page);
-  await expect(world.loginPage.logoutLink).toHaveCount(0, {
+  const page = world.page;
+  await expect(page).toHaveURL(new URL(LOGIN_ROUTE, world.baseURL).toString(), {
     timeout: ASSERTION_TIMEOUT,
   });
-
-  // The login form is stronger evidence than a navigation-header link.
-  // Some healthy responses omit the header while still showing the login form.
-  const loginForm = world.page.locator('form[action="/login"]');
-  const loginEmail = world.loginPage.emailInput;
-  const loginPassword = world.loginPage.passwordInput;
-  const loginButton = world.loginPage.loginButton;
-  const formVisible = await loginForm.isVisible().catch(() => false);
-  if (formVisible) {
-    await expect(loginEmail).toBeVisible({ timeout: ASSERTION_TIMEOUT });
-    await expect(loginPassword).toBeVisible({ timeout: ASSERTION_TIMEOUT });
-    await expect(loginButton).toBeVisible({ timeout: ASSERTION_TIMEOUT });
-    return;
-  }
-
-  // If the form is absent, this is NOT a confirmed logged-out state.
-  throw new Error(
-    `LOGOUT_STATE_UNCONFIRMED: Logout link absent but login form not visible. ` +
-    `Current URL: ${world.page.url()}`,
-  );
+  await verifySiteHealth(page);
+  await expect(page.locator('form[action="/login"]')).toBeVisible({ timeout: ASSERTION_TIMEOUT });
+  await expect(world.loginPage.emailInput).toBeVisible({ timeout: ASSERTION_TIMEOUT });
+  await expect(world.loginPage.passwordInput).toBeVisible({ timeout: ASSERTION_TIMEOUT });
+  await expect(world.loginPage.loginButton).toBeVisible({ timeout: ASSERTION_TIMEOUT });
+  await expect(world.loginPage.logoutLink).toHaveCount(0, { timeout: ASSERTION_TIMEOUT });
+  await expect(page.locator('a[href="/logout"]')).toHaveCount(0, { timeout: ASSERTION_TIMEOUT });
+  await expect(world.loginPage.loggedInUser).toHaveCount(0, { timeout: ASSERTION_TIMEOUT });
+  await verifySiteHealth(page);
 }
-
 
 
 /**
@@ -277,38 +265,53 @@ async function continueAfterRegistration(world: AppWorld): Promise<void> {
 async function logoutSafely(world: AppWorld): Promise<void> {
   const page = world.page;
   await verifySiteHealth(page);
+  const logoutRoute = page.locator('a[href="/logout"]');
+  const loginURL = new URL(LOGIN_ROUTE, world.baseURL).toString();
 
-  // Given "I am logged out" must also work when the browser is already logged out.
-  if (!(await world.loginPage.logoutLink.isVisible().catch(() => false))) {
-    try {
-      await verifyLoggedOut(world);
-      return;
-    } catch {
-      await navigateWithRecovery(page, LOGIN_ROUTE, world.healingEvents, config.recovery);
-      await verifyLoggedOut(world);
-      return;
+  // An already signed-out browser may be on a different public page.
+  if (!(await visible(world.loginPage.logoutLink)) && !(await visible(logoutRoute))) {
+    if (await visible(world.loginPage.loggedInUser)) {
+      throw new Error('LOGOUT_STATE_UNCONFIRMED: Signed-in user visible but logout link missing.');
     }
-  }
-
-  const logout = await resolveLocator(
-    page,
-    'logout-link',
-    [world.loginPage.logoutLink, page.locator('a[href="/logout"]')],
-    world.healingEvents,
-  );
-  await logout.click({ timeout: 15000, noWaitAfter: true });
-
-  // Never replay the state-changing logout click. Restore the read-only login
-  // page if the response or header is incomplete, then assert actual form state.
-  try {
-    await verifyLoggedOut(world);
-  } catch (error) {
-    logRecovery(world.healingEvents, 'Logout confirmation recovery', 'attempted',
-      `Checking login form after logout: ${String(error)}`);
     await navigateWithRecovery(page, LOGIN_ROUTE, world.healingEvents, config.recovery);
     await verifyLoggedOut(world);
-    logRecovery(world.healingEvents, 'Logout confirmation recovery', 'recovered',
-      'Login form visible and logout link absent after safe navigation.');
+    return;
+  }
+
+  const logout = await resolveLocator(page, 'logout-link',
+    [world.loginPage.logoutLink, logoutRoute], world.healingEvents);
+  let status: number | undefined;
+  const observe = (response: import('@playwright/test').Response): void => {
+    if (new URL(response.url()).pathname === '/logout' && response.request().isNavigationRequest()) {
+      status = response.status();
+    }
+  };
+  page.on('response', observe);
+  try {
+    // One click only; wait explicitly for the destination before inspecting DOM.
+    await logout.click({ timeout: 15000 });
+    await page.waitForURL(loginURL, { waitUntil: 'domcontentloaded', timeout: ASSERTION_TIMEOUT });
+    await verifyLoggedOut(world);
+  } catch (error) {
+    const details = `URL=${page.url()}; logoutHTTP=${status ?? 'unknown'}; error=${String(error)}`;
+    logRecovery(world.healingEvents, 'Logout confirmation recovery', 'attempted', details);
+    try {
+      // Read-only navigation is allowed only for an unavailable/ambiguous response.
+      // A healthy page with a failed logout assertion must remain a failure.
+      const transient = status !== undefined && /^(429|500|502|503|504|520|521|522|523|524)$/.test(String(status));
+      if (!transient && !isEnvironmentFailure(error) && !(await environmentUnavailable(world))) {
+        throw error;
+      }
+      await navigateWithRecovery(page, LOGIN_ROUTE, world.healingEvents, config.recovery);
+      await verifyLoggedOut(world);
+      logRecovery(world.healingEvents, 'Logout confirmation recovery', 'recovered',
+        'Login page and signed-out UI verified without repeating logout.');
+    } catch (recoveryError) {
+      logRecovery(world.healingEvents, 'Logout confirmation recovery', 'failed', String(recoveryError));
+      throw new Error(`LOGOUT_STATE_UNCONFIRMED: ${details}; verification=${String(recoveryError)}`);
+    }
+  } finally {
+    page.off('response', observe);
   }
 }
 
