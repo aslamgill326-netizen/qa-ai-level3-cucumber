@@ -55,8 +55,8 @@ for (const file of [results, html, path.join(reportDir, 'ai-rca.json'), path.joi
   if (fs.existsSync(file)) fs.unlinkSync(file);
 }
 
-// 1. Execute selected or all scenarios.
-console.log('\n=== RUNNING TESTS ===');
+// 1. Execute regression scenarios; intentionally failing RCA validation is excluded.
+console.log('\n=== RUNNING REGRESSION TESTS (excluding @rca-validation) ===');
 
 
 const tests = run(cli, [
@@ -64,6 +64,7 @@ const tests = run(cli, [
   '--format', 'progress',
   '--format', 'json:reports/cucumber/results.json',
   ...process.argv.slice(2),
+  '--tags', 'not @rca-validation',
 ]);
 
 

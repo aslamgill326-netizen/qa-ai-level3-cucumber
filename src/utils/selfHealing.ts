@@ -22,13 +22,16 @@ export type RecoveryDecision = 'retry' | 'verify-state' | 'stop';
 
 const DEFAULT_OPTIONS: Required<RecoveryOptions> = {
   maxAttempts: 3,
-  initialDelayMs: 1500,
-  maxDelayMs: 6000,
+  initialDelayMs: 5000,
+  maxDelayMs: 15000,
   timeoutMs: 15000,
 };
 
-const TRANSIENT_STATUSES = new Set([429, 502, 503, 504]);
-const ENVIRONMENT_PATTERN = /ENVIRONMENT_UNAVAILABLE|queue full|under heavy load|HTTP (429|502|503|504)|service unavailable/i;
+const TRANSIENT_STATUSES = new Set([
+  429, 502, 503, 504, 520, 521, 522, 523, 524
+]);
+const ENVIRONMENT_PATTERN =
+  /ENVIRONMENT_UNAVAILABLE|queue full|under heavy load|HTTP (429|502|503|504|520|521|522|523|524)|service unavailable/i;
 const TIMEOUT_PATTERN = /Timeout \d+ms exceeded|TimeoutError|ETIMEDOUT|ESOCKETTIMEDOUT/i;
 
 function normalizeOptions(options: RecoveryOptions = {}): Required<RecoveryOptions> {
@@ -117,7 +120,8 @@ export async function retryApiOnOverload(
   for (let attempt = 1; attempt <= cfg.maxAttempts; attempt++) {
     try {
       const response = await operation();
-      if (!TRANSIENT_STATUSES.has(response.status())) {
+      const body = await response.text();
+      if (!TRANSIENT_STATUSES.has(response.status()) && !/under heavy load|queue full|service unavailable/i.test(body)) {
         if (attempt > 1) {
           logEvent(events, {
             name: operationName, strategy: 'environment', candidate: attempt,
@@ -128,7 +132,7 @@ export async function retryApiOnOverload(
       }
       const status = response.status();
       if (attempt === cfg.maxAttempts) {
-        const body = await response.text().catch(() => '');
+        await response.dispose();
         logEvent(events, {
           name: operationName, strategy: 'environment', candidate: attempt,
           status: 'failed', message: `HTTP ${status}: ${body.slice(0, 200)}`,
@@ -138,6 +142,7 @@ export async function retryApiOnOverload(
           `after ${attempt} attempts. ${body.slice(0, 200)}`,
         );
       }
+      await response.dispose();
       logEvent(events, {
         name: operationName, strategy: 'environment', candidate: attempt,
         status: 'attempted', message: `HTTP ${status}; retry scheduled`,

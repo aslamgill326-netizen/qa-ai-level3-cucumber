@@ -8,7 +8,6 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 0 * * *' # Daily 05:00 Pakistan Standard Time (UTC+5)
-    - cron: '0 11 20 11 *' # TEMPORARY: Nov 20 at 16:00 PKT; remove after demo
 
 permissions:
   contents: read
@@ -71,10 +70,11 @@ jobs:
         continue-on-error: true
         run: npm run typecheck
 
-      - name: Run Cucumber regression and generate reports
+      - name: Run Cucumber regression (exclude RCA validation) and generate reports
         id: tests
         continue-on-error: true
         run: npm run test:ci
+        # package.json test:ci passes --tags "not @rca-validation" to the report runner.
 
       - name: Recover AI RCA if runner failed early
         if: always()

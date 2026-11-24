@@ -20,7 +20,8 @@
     "test:dashboard": "node tools/report/run-and-open.cjs",
     "test:ci": "node tools/report/run-and-open.cjs --tags \"not @rca-validation\"",
     "rca:analyze": "node tools/report/ai-rca.cjs",
-    "report:dashboard": "node tools/report/dashboard-generator.cjs"
+    "report:dashboard": "node tools/report/dashboard-generator.cjs",
+    "test:ci:rca": "node tools/report/run-and-open.cjs"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.3.0",

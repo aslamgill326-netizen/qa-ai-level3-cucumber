@@ -16,6 +16,7 @@ Given('I am on the products page', async function (this: AppWorld) {
     this.healingEvents
   );
 
+  await verifySiteHealth(this.page);
   await expect(
     this.page.locator('.features_items .product-image-wrapper').first()
   ).toBeVisible();
@@ -37,6 +38,7 @@ When('I search for product {string}', async function (
   this: AppWorld,
   name: string
 ) {
+  await verifySiteHealth(this.page);
   await this.page.locator('#search_product').fill(name);
   await this.page.locator('#submit_search').click();
 });
@@ -129,6 +131,7 @@ Then('I should see its name price and availability', async function (
 When('I search for a product with an empty keyword', async function (
   this: AppWorld
 ) {
+  await verifySiteHealth(this.page);
   await this.page.locator('#search_product').fill('');
   await this.page.locator('#submit_search').click();
 });
@@ -139,8 +142,9 @@ Then(
   async function (this: AppWorld) {
     const searchInput = this.page.locator('#search_product');
 
-    // Empty input should remain empty.
-    await expect(searchInput).toHaveValue('');
+    // Distinguish an overloaded server page from a missing locator.
+    await verifySiteHealth(this.page);
+    await expect(searchInput).toHaveValue('', { timeout: 10000 });
 
     // The application should remain on a valid products page.
     await expect(this.page).toHaveURL(

@@ -19,7 +19,8 @@ async function parseResponse(response: APIResponse): Promise<ApiBody> {
   const text = await response.text();
 
   if (
-    [429, 502, 503, 504].includes(status) ||
+    [429, 500, 502, 503, 504, 520, 521, 522, 523, 524]
+  .includes(status) ||
     /under heavy load|queue full/i.test(text)
   ) {
     throw new Error(

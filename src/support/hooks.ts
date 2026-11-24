@@ -93,31 +93,6 @@ After(async function (this: AppWorld, scenario) {
     errors.push(`Screenshot: ${String(error)}`);
   }
 
-  // 2. Attach RCA and self-healing evidence.
-  try {
-    const rca = classifyFailure(
-      scenario.result?.message || '',
-      this.lastNavigationStatus
-    );
-
-    await this.attach(
-      JSON.stringify(
-        {
-          scenario: scenario.pickle.name,
-          status: scenario.result?.status,
-          rca,
-          healingEvents: this.healingEvents,
-          lastNavigationStatus: this.lastNavigationStatus,
-        },
-        null,
-        2
-      ),
-      'application/json'
-    );
-  } catch (error) {
-    errors.push(`RCA: ${String(error)}`);
-  }
-
   // 3. Cleanup disposable accounts.
   try {
     if (this.accountCreated && this.api) {
@@ -220,6 +195,19 @@ After(async function (this: AppWorld, scenario) {
   } catch (error) {
     errors.push(`Browser: ${String(error)}`);
   }
+
+  // Attach final evidence after cleanup and resource release.
+  const finalStatus = errors.length ? Status.FAILED : scenario.result?.status;
+  const message = [scenario.result?.message || '', ...errors].filter(Boolean).join('\n');
+  await this.attach(JSON.stringify({
+    scenario: scenario.pickle.name,
+    status: finalStatus,
+    preCleanupStatus: scenario.result?.status,
+    cleanupErrors: errors,
+    rca: finalStatus === Status.FAILED ? classifyFailure(message, null) : null,
+    healingEvents: this.healingEvents,
+    lastNavigationStatus: this.lastNavigationStatus,
+  }, null, 2), 'application/json');
 
   // 10. Report cleanup errors.
   if (errors.length > 0) {
