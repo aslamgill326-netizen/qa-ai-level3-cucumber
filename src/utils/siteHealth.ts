@@ -7,7 +7,7 @@ export interface SiteHealthResult {
   reason: string;
 }
 
-const ERROR_STATUSES = new Set([429, 500, 502, 503, 504]);
+const ERROR_STATUSES = new Set([429, 500, 502, 503, 504, 520, 521, 522, 523, 524]);
 const ERROR_TEXT = /under heavy load|queue full|service unavailable|too many requests|bad gateway|gateway timeout|internal server error/i;
 
 /** Checks the currently displayed page; never navigates or retries a submission. */

@@ -55,7 +55,7 @@ export class AppWorld extends World {
       maxAttempts: 3,
       initialDelayMs: 2000,
       maxDelayMs: 10000,
-      timeoutMs: 30000,
+      timeoutMs: 15000,
     });
     console.log(`[WORLD] Application opened: ${this.page.url()}`);
   }

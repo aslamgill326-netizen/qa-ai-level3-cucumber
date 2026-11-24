@@ -54,8 +54,10 @@ function delay(attempt: number, options: Required<RecoveryOptions>): Promise<voi
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+const NETWORK_PATTERN = /net::ERR_(CONNECTION_RESET|CONNECTION_CLOSED|CONNECTION_TIMED_OUT|TIMED_OUT|NETWORK_CHANGED|EMPTY_RESPONSE)\b|\bECONNRESET\b/i;
+
 function isRecoverable(error: unknown): boolean {
-  return ENVIRONMENT_PATTERN.test(String(error)) || TIMEOUT_PATTERN.test(String(error));
+  return ENVIRONMENT_PATTERN.test(String(error)) || TIMEOUT_PATTERN.test(String(error)) || NETWORK_PATTERN.test(String(error));
 }
 
 export function decideRecovery(operation: RecoveryOperation, status: number): RecoveryDecision {
